@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+
 using Adletec.Sonic.Execution;
 using Adletec.Sonic.Operations;
 
@@ -14,7 +15,73 @@ namespace Adletec.Sonic.Parsing
             this.executor = executor;
         }
 
-        public Operation Optimize(Operation operation, IFunctionRegistry functionRegistry, IConstantRegistry constantRegistry)
+        public Operation OptimizeNew(
+            Operation operation,
+            IFunctionRegistry functionRegistry,
+            IConstantRegistry constantRegistry)
+        {
+            switch (operation)
+            {
+                case Multiplication m:
+                    FloatingPointConstant multiplier = new FloatingPointConstant(1);
+                    var optimizedOperation = OptimizeMultiplication(
+                        ref multiplier,
+                        m,
+                        functionRegistry,
+                        constantRegistry);
+                    if (multiplier.Value != 1)
+                    {
+                        m.Argument1 = multiplier;
+                        m.Argument2 = optimizedOperation;
+                    }
+                    break;
+            }
+
+            return Optimize(operation, functionRegistry, constantRegistry);
+        }
+
+        private Operation OptimizeMultiplication(
+            ref FloatingPointConstant multiplier,
+            Multiplication multiplication,
+            IFunctionRegistry functionRegistry,
+            IConstantRegistry constantRegistry)
+        {
+            if (TryGetFloatingPointConstant(multiplication.Argument1, out var constant))
+            {
+                multiplier = new FloatingPointConstant(multiplier.Value * constant.Value);
+                if (multiplication.Argument2 is Multiplication arg2)
+                    return OptimizeMultiplication(ref multiplier, arg2, functionRegistry, constantRegistry);
+                return OptimizeNew(multiplication.Argument2, functionRegistry, constantRegistry);
+            }
+            if (TryGetFloatingPointConstant(multiplication.Argument2, out constant))
+            {
+                multiplier = new FloatingPointConstant(multiplier.Value * constant.Value);
+                if (multiplication.Argument1 is Multiplication arg1)
+                    return OptimizeMultiplication(ref multiplier, arg1, functionRegistry, constantRegistry);
+                return OptimizeNew(multiplication.Argument1, functionRegistry, constantRegistry);
+            }
+
+            return multiplication;
+        }
+
+        private bool TryGetFloatingPointConstant(Operation operation, out FloatingPointConstant constant)
+        {
+            if ((constant = operation as FloatingPointConstant) != null)
+                return true;
+
+            if (operation is IntegerConstant ic)
+            {
+                constant = new FloatingPointConstant(ic.Value);
+                return true;
+            }
+
+            return false;
+        }
+
+        public Operation Optimize(
+            Operation operation,
+            IFunctionRegistry functionRegistry,
+            IConstantRegistry constantRegistry)
         {
             if (operation.GetType() == typeof(Addition))
             {
@@ -35,7 +102,8 @@ namespace Adletec.Sonic.Parsing
                 var subtraction = (Subtraction)operation;
                 subtraction.Argument1 = Optimize(subtraction.Argument1, functionRegistry, constantRegistry);
                 subtraction.Argument2 = Optimize(subtraction.Argument2, functionRegistry, constantRegistry);
-                if (subtraction.Argument1.DependsOnVariables == false && subtraction.Argument2.DependsOnVariables == false)
+                if (subtraction.Argument1.DependsOnVariables == false
+                    && subtraction.Argument2.DependsOnVariables == false)
                 {
                     subtraction.DependsOnVariables = false;
                 }
@@ -55,8 +123,8 @@ namespace Adletec.Sonic.Parsing
                     return new FloatingPointConstant(0.0);
                 }
 
-                if (multiplication.Argument1.DependsOnVariables == false &&
-                    multiplication.Argument2.DependsOnVariables == false)
+                if (multiplication.Argument1.DependsOnVariables == false
+                    && multiplication.Argument2.DependsOnVariables == false)
                 {
                     multiplication.DependsOnVariables = false;
                 }
@@ -93,13 +161,14 @@ namespace Adletec.Sonic.Parsing
                 {
                     return new FloatingPointConstant(1.0);
                 }
-                
+
                 if (IsZero(exponentiation.Base))
                 {
                     return new FloatingPointConstant(0.0);
                 }
 
-                if (exponentiation.Base.DependsOnVariables == false && exponentiation.Exponent.DependsOnVariables == false)
+                if (exponentiation.Base.DependsOnVariables == false
+                    && exponentiation.Exponent.DependsOnVariables == false)
                 {
                     exponentiation.DependsOnVariables = false;
                 }
@@ -108,10 +177,12 @@ namespace Adletec.Sonic.Parsing
                     exponentiation.IsIdempotent = true;
                 }
             }
-            else if(operation.GetType() == typeof(Function))
+            else if (operation.GetType() == typeof(Function))
             {
                 var function = (Function)operation;
-                IList<Operation> arguments = function.Arguments.Select(a => Optimize(a, functionRegistry, constantRegistry)).ToList();
+                IList<Operation> arguments = function.Arguments
+                    .Select(a => Optimize(a, functionRegistry, constantRegistry))
+                    .ToList();
                 function.Arguments = arguments;
                 function.IsIdempotent = functionRegistry.GetFunctionInfo(function.FunctionName).IsIdempotent;
                 for (int i = 0; i < arguments.Count; i++)
@@ -131,8 +202,10 @@ namespace Adletec.Sonic.Parsing
                 }
                 function.DependsOnVariables = arguments.Any(a => a.DependsOnVariables);
             }
-            
-            if (!operation.DependsOnVariables && operation.IsIdempotent && operation.GetType() != typeof(IntegerConstant)
+
+            if (!operation.DependsOnVariables
+                && operation.IsIdempotent
+                && operation.GetType() != typeof(IntegerConstant)
                 && operation.GetType() != typeof(FloatingPointConstant))
             {
                 double result = executor.Execute(operation, functionRegistry, constantRegistry);
@@ -143,7 +216,7 @@ namespace Adletec.Sonic.Parsing
             return operation;
         }
 
-        
+
         private bool IsZero(Operation operation)
         {
             if (operation.GetType() == typeof(FloatingPointConstant))
