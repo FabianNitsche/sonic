@@ -191,4 +191,106 @@ public class OptimizerTests
         Assert.AreEqual(typeof(FloatingPointConstant), optimizedOperation.GetType());
         Assert.AreEqual(15.0, ((FloatingPointConstant)optimizedOperation).Value);
     }
+
+    [TestMethod]
+    public void TestOptimizerTwoSidedMultiplication()
+    {
+        Optimizer optimizer = new Optimizer(new Interpreter());
+
+        TokenReader tokenReader = new TokenReader();
+        IList<Token> tokens = tokenReader.Read("0.1 * var1 * 0.1");
+
+        IFunctionRegistry functionRegistry = new FunctionRegistry(true, false);
+
+        AstBuilder astBuilder = new AstBuilder(functionRegistry, new ConstantRegistry(true, false));
+        Operation operation = astBuilder.Build(tokens);
+
+        Operation optimizedOperation = optimizer.OptimizeNew(operation, functionRegistry, null);
+
+        Assert.AreEqual(typeof(Multiplication), optimizedOperation.GetType());
+
+        Multiplication multiplication = (Multiplication)optimizedOperation;
+
+        FloatingPointConstant constant = multiplication.Argument1 as FloatingPointConstant ?? multiplication.Argument2 as FloatingPointConstant;
+        Assert.IsNotNull(constant);
+
+        Variable variable = multiplication.Argument1 as Variable ?? multiplication.Argument2 as Variable;
+        Assert.IsNotNull(variable);
+
+        Assert.AreEqual(0.01, constant.Value, 1e-7);
+    }
+
+    [TestMethod]
+    public void TestOptimizerTwoSidedAddition()
+    {
+        Optimizer optimizer = new Optimizer(new Interpreter());
+
+        TokenReader tokenReader = new TokenReader();
+        IList<Token> tokens = tokenReader.Read("0.1 + var1 + 0.1");
+
+        IFunctionRegistry functionRegistry = new FunctionRegistry(true, false);
+
+        AstBuilder astBuilder = new AstBuilder(functionRegistry, new ConstantRegistry(true, false));
+        Operation operation = astBuilder.Build(tokens);
+
+        Operation optimizedOperation = optimizer.Optimize(operation, functionRegistry, null);
+
+        Assert.AreEqual(typeof(Addition), optimizedOperation.GetType());
+
+        Addition multiplication = (Addition)optimizedOperation;
+
+        FloatingPointConstant constant = multiplication.Argument1 as FloatingPointConstant ?? multiplication.Argument2 as FloatingPointConstant;
+        Assert.IsNotNull(constant);
+
+        Variable variable = multiplication.Argument1 as Variable ?? multiplication.Argument2 as Variable;
+        Assert.IsNotNull(variable);
+
+        Assert.AreEqual(0.2, constant.Value);
+    }
+
+    [TestMethod]
+    public void TestOptimizerTwoSidedSubtraction()
+    {
+        Optimizer optimizer = new Optimizer(new Interpreter());
+
+        TokenReader tokenReader = new TokenReader();
+        IList<Token> tokens = tokenReader.Read("0.1 - var1 - 0.1");
+
+        IFunctionRegistry functionRegistry = new FunctionRegistry(true, false);
+
+        AstBuilder astBuilder = new AstBuilder(functionRegistry, new ConstantRegistry(true, false));
+        Operation operation = astBuilder.Build(tokens);
+
+        Operation optimizedOperation = optimizer.Optimize(operation, functionRegistry, null);
+
+        Assert.AreEqual(typeof(Variable), optimizedOperation.GetType());
+    }
+
+    [TestMethod]
+    public void TestOptimizerTwoSidedSubtractionWithParenthesis()
+    {
+        Optimizer optimizer = new Optimizer(new Interpreter());
+
+        TokenReader tokenReader = new TokenReader();
+        IList<Token> tokens = tokenReader.Read("0.1 - (var1 - 0.1)");
+
+        IFunctionRegistry functionRegistry = new FunctionRegistry(true, false);
+
+        AstBuilder astBuilder = new AstBuilder(functionRegistry, new ConstantRegistry(true, false));
+        Operation operation = astBuilder.Build(tokens);
+
+        Operation optimizedOperation = optimizer.Optimize(operation, functionRegistry, null);
+
+        Assert.AreEqual(typeof(Subtraction), optimizedOperation.GetType());
+
+        Subtraction multiplication = (Subtraction)optimizedOperation;
+
+        FloatingPointConstant constant = multiplication.Argument1 as FloatingPointConstant ?? multiplication.Argument2 as FloatingPointConstant;
+        Assert.IsNotNull(constant);
+
+        Variable variable = multiplication.Argument1 as Variable ?? multiplication.Argument2 as Variable;
+        Assert.IsNotNull(variable);
+
+        Assert.AreEqual(0.2, constant.Value);
+    }
 }
